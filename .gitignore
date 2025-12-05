@@ -29,7 +29,7 @@ backend/.pytest_cache/
 backend/.mypy_cache/
 
 # 如果你的 .env 在根目录或 backend 目录，根据实际情况保留：
-# .env
+.env
 backend/.env
 
 # =========================
