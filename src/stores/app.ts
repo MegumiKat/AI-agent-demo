@@ -5,6 +5,9 @@ import { validateConfig, delay, generateSSML } from '../utils'
 import { avatarService } from '../services/avatar'
 import { llmService } from '../services/llm'
 
+
+let silenceTimer: number | null = null
+
 // 应用状态
 export const appState = reactive<AppState>({
   avatar: {
@@ -20,7 +23,10 @@ export const appState = reactive<AppState>({
     // appId: '',
     // secretId: '',
     // secretKey: '',
-    isListening: false
+    isListening: false,
+    mode:'online',
+    lastSpeech:0,
+    wakeWord:'你好你好',
   },
   llm: {
     model: LLM_CONFIG.DEFAULT_MODEL,

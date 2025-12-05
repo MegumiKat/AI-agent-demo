@@ -6,10 +6,14 @@ interface AvatarCallbacks {
   onSubtitleOn: (text: string) => void
   onSubtitleOff: () => void
   onStateChange: (state: string) => void
+
+  onStatusChange?: (status: number) => void       // SDKStatus.online/offline...
+  onVoiceStateChange?: (status: string) => void   // voice_start / voice_end
 }
 
 class AvatarService {
   private containerId: string
+  private avatar: any | null = null
 
   constructor() {
     this.containerId = generateContainerId()
@@ -37,7 +41,14 @@ class AvatarService {
    */
   async connect(config: AvatarConfig, callbacks: AvatarCallbacks): Promise<any> {
     const { appId, appSecret } = config
-    const { onSubtitleOn, onSubtitleOff, onStateChange } = callbacks
+    const {
+      onSubtitleOn,
+      onSubtitleOff,
+      onStateChange,
+
+      onStatusChange,
+      onVoiceStateChange,
+    } = callbacks
 
     // 构建网关URL
     const url = new URL(SDK_CONFIG.GATEWAY_URL)
@@ -67,7 +78,21 @@ class AvatarService {
           onSubtitleOff()
         }
       },
-      onStateChange,
+      // onStateChange,
+
+      onStateChange: (state: string) => {
+        console.log('SDK State Change:', state)
+        onStateChange?.(state)
+      },
+      onStatusChange: (status: number) => {
+        console.log('SDK Status Change:', status)
+        onStatusChange?.(status)
+      },
+      onVoiceStateChange: (status: string) => {
+        console.log('SDK Voice State Change:', status)
+        onVoiceStateChange?.(status)
+      },
+
       onMessage: async (error: any) => {
         const state = await getPromiseState(connectPromise)
         const plainError = new Error(error.message)
@@ -79,7 +104,7 @@ class AvatarService {
 
     // 创建SDK实例
     const avatar = new window.XmovAvatar(constructorOptions)
-    
+
     // 等待初始化
     await new Promise(resolve => {
       setTimeout(resolve, APP_CONFIG.AVATAR_INIT_TIMEOUT)
@@ -119,15 +144,66 @@ class AvatarService {
    * @returns {void}
    */
   disconnect(avatar: any): void {
+    const target = avatar || this.avatar
     if (!avatar) return
-    
+
+    // try {
+    //   avatar.stop()
+    //   avatar.destroy()
+    // } catch (error) {
+    //   console.error('断开连接时出错:', error)
+    // }
+
     try {
-      avatar.stop()
-      avatar.destroy()
-    } catch (error) {
-      console.error('断开连接时出错:', error)
+      target.stop?.()
+      target.destroy?.()
+    } catch (e) {
+      console.error('断开连接时出错:', e)
+    } finally {
+      if (!avatar || avatar === this.avatar) {
+        this.avatar = null
+      }
     }
   }
+
+
+
+
+
+  // 切换在线/离线
+  onlineMode() {
+    this.avatar?.onlineMode?.()
+  }
+
+  offlineMode() {
+    this.avatar?.offlineMode?.()
+  }
+
+  // 待机状态
+  idle() {
+    this.avatar?.idle?.()
+  }
+
+  interactiveIdle() {
+    this.avatar?.interactiveidle?.()
+  }
+
+  // 倾听/思考
+  listen() {
+    this.avatar?.listen?.()
+  }
+
+  think() {
+    this.avatar?.think?.()
+  }
+
+  // 说话（简单封装一个非流式版本，后面可以扩展成流式）
+  speakText(text: string) {
+    if (!text) return
+    this.avatar?.speak?.(text, true, true)
+  }
+
+
 }
 
 export const avatarService = new AvatarService()

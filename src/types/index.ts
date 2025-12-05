@@ -66,6 +66,9 @@ export interface AppState {
     // secretId: string
     // secretKey: string
     isListening: boolean
+    mode:string
+    lastSpeech: number
+    wakeWord: string
   }
   
   // LLM配置
