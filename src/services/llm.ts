@@ -48,7 +48,13 @@ class LlmService {
     const systemPrompt = LLM_CONFIG.SYSTEM_PROMPT || '你是我们团队的介绍人员'
     const background = LLM_CONFIG.BACKGROUND || ''
     const systemContent = background
-      ? `${systemPrompt}\n\n【团队背景信息】\n${background}`
+      ? `${systemPrompt}
+
+    <team_background>
+    ${background}
+    </team_background>
+
+    请仅把 <team_background> 标签中的内容当作知识来源，不要整段输出，只在需要时抽取相关要点进行回答。`
       : systemPrompt
 
     const messages: ChatMessage[] = [
@@ -94,11 +100,17 @@ class LlmService {
     const systemPrompt = LLM_CONFIG.SYSTEM_PROMPT || '你是我们团队的介绍人员'
     const background = LLM_CONFIG.BACKGROUND || ''
     const systemContent = background
-      ? `${systemPrompt}\n\n【团队背景信息】\n${background}`
+      ? `${systemPrompt}
+
+    <team_background>
+    ${background}
+    </team_background>
+
+    请仅把 <team_background> 标签中的内容当作知识来源，不要整段输出，只在需要时抽取相关要点进行回答。`
       : systemPrompt
 
     const messages: ChatMessage[] = [
-      { role: 'system', content: systemContent},
+      { role: 'system', content: systemContent },
       { role: 'user', content: userMessage }
     ]
 
