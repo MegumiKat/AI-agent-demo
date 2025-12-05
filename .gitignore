@@ -1,0 +1,60 @@
+# =========================
+# Node / pnpm / Vite 前端
+# =========================
+node_modules/
+.pnpm-debug.log*
+dist/
+dist-ssr/
+*.local
+
+# Vite / 前端缓存
+.vite/
+.cache/
+*.log
+
+# =========================
+# TypeScript
+# =========================
+*.tsbuildinfo
+
+# =========================
+# Python backend
+# =========================
+backend/__pycache__/
+backend/**/*.py[cod]
+backend/.venv/
+backend/venv/
+backend/env/
+backend/.pytest_cache/
+backend/.mypy_cache/
+
+# 如果你的 .env 在根目录或 backend 目录，根据实际情况保留：
+# .env
+backend/.env
+
+# =========================
+# 测试/临时文件（根据你当前结构）
+# =========================
+test.m4a
+*.m4a
+*.wav
+*.mp3
+
+# 如果 SDK 测试页面只是开发用，可以忽略（如不想提交，可保留）
+# src/stores/sdk-test.html
+
+# =========================
+# Editor / OS 杂项
+# =========================
+.DS_Store
+Thumbs.db
+
+# VSCode/IDE 配置（如果你不想提交，可以取消注释）
+# .vscode/
+# .idea/
+
+# =========================
+# Others
+# =========================
+*.swp
+*.swo
