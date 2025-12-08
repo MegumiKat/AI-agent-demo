@@ -76,6 +76,13 @@ class AvatarService {
         } else if (event.type === 'subtitle_off') {
           onSubtitleOff()
         }
+
+        if (event.type === 'voice_start') {
+          onStateChange('speak')
+        } else if (event.type === 'voice_end') {
+          // 说完了，先标记一个非 speak 状态，比如 idle
+          onStateChange('idle')
+        }
       },
       onStateChange,
       onMessage: async (error: any) => {

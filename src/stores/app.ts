@@ -133,6 +133,8 @@ export const avatarState = ref('')
 
 // Store类 - 业务逻辑处理
 export class AppStore {
+  private silenceTimer: number | null = null
+  private asrLoopStopped = false
   /**
    * 连接虚拟人
    * @returns {Promise<void>} - 返回连接结果的Promise
@@ -166,6 +168,8 @@ export class AppStore {
 
       avatarService.avatarGoOnline()
       avatarService.avatarToInteractiveIdle()
+
+      this.startContinuousListening()
     } catch (error) {
       appState.avatar.connected = false
       throw error
@@ -177,6 +181,7 @@ export class AppStore {
    * @returns {void}
    */
   disconnectAvatar(): void {
+    this.stopContinuousListening()
     if (appState.avatar.instance) {
       avatarService.avatarGoOffline()
       avatarService.disconnect(appState.avatar.instance)
@@ -211,7 +216,7 @@ export class AppStore {
       // 等待虚拟人停止说话
       await this.waitForAvatarReady()
 
-      avatarService.avatarToThink()
+      // avatarService.avatarToThink()
 
       // 流式播报响应内容
       let buffer = ''
@@ -253,7 +258,7 @@ export class AppStore {
       const finalSsml = generateSSML('')
       avatar.instance.speak(finalSsml, false, true)
 
-      avatarService.avatarToInteractiveIdle()
+      // avatarService.avatarToInteractiveIdle()
 
       return buffer
     } catch (error) {
@@ -275,6 +280,7 @@ export class AppStore {
   }): void {
     appState.asr.isListening = true
     // ASR逻辑由组件处理
+    avatarService.avatarToListen?.()
   }
 
   /**
@@ -297,19 +303,160 @@ export class AppStore {
   }
 
 
+  /**
+    * 开始监听
+    * @returns {void}
+    */
+  startContinuousListening(): void {
+    if (this.silenceTimer !== null) {
+      console.log('[appStore] 连续监听已启动')
+      return
+    }
 
-  startContinuousListening() {
-    console.log('[appStore] startContinuousListening() 暂未实现')
+    this.asrLoopStopped = false
+    // appState.interaction.lastUserVoiceAt = Date.now()
+    appState.interaction.mode = 'online'
+
+    // 1. 启动 ASR 循环
+    this.startAsrLoop()
+
+    // 2. 启动静音检测定时器
+    const CHECK_INTERVAL = 500  // 每 500ms 检查一次
+    this.silenceTimer = window.setInterval(() => {
+      const now = Date.now()
+      const last = appState.interaction.lastUserVoiceAt
+
+      if(!last) return
+
+      const diff = now - last
+
+      if (avatarState.value === 'speak') {
+        return
+      }
+      // console.log('[timer]', diff, avatarState.value, appState.interaction.mode)
+
+      // 已经离线就不再切状态，这里后面加唤醒词逻辑
+      if (appState.interaction.mode === 'offline') {
+        return
+      }
+
+      // 3 秒无人说话 → 待机互动
+      if (diff >= 3000 && diff < 5000 && appState.interaction.mode !== 'standby') {
+        appState.interaction.mode = 'standby'
+        avatarService.avatarToInteractiveIdle()
+      }
+
+      // 5 秒无人说话 → offline
+      // if (diff >= 10000) {
+      //   appState.interaction.mode = 'offline'
+      //   avatarService.avatarGoOffline()
+      // }
+    }, CHECK_INTERVAL)
+
+    console.log('[appStore] 连续监听已启动')
   }
 
-  stopContinuousListening() {
-    console.log('[appStore] stopContinuousListening() 暂未实现')
+  /**
+   * 停止监听
+   * @returns {void}
+   */
+  stopContinuousListening(): void {
+    this.asrLoopStopped = true
+
+    if (this.silenceTimer !== null) {
+      window.clearInterval(this.silenceTimer)
+      this.silenceTimer = null
+    }
+
+    // 停止按钮那条逻辑保持不变
+    this.stopVoiceInput()
+
+    const asr = (window as any).__asr
+    if (asr && typeof asr.stop === 'function') {
+      asr.stop()
+    }
+
+    console.log('[appStore] 连续监听已停止')
   }
+
 
   updateLastUserVoice() {
     appState.interaction.lastUserVoiceAt = Date.now()
-    // 后面我们会在这里触发状态机逻辑（3s 待机 / 5s offline）
     console.log('[appStore] lastUserVoiceAt 更新为', appState.interaction.lastUserVoiceAt)
+
+    if (appState.interaction.mode === 'standby') {
+      appState.interaction.mode = 'online'
+    }
+    // 如果之前因为静音切到了 standby/offline，后面我们会在这里拉回 online
+    // 现在先不动，下一步加“离线唤醒词”的时候再细化
+  }
+
+
+
+  /**
+   * 内部使用：ASR 循环
+   * 假设你在某个地方已经 useAsr(...) 并把 start/stop 注入到了 appStore，
+   * 否则这里可以通过依赖注入或直接传进来。
+   */
+  private async startAsrLoop() {
+    const asr = (window as any).__asr
+    if (!asr || typeof asr.start !== 'function') {
+      console.warn('[appStore] __asr 未初始化，无法启动 ASR 循环')
+      return
+    }
+
+    const loop = () => {
+      if (this.asrLoopStopped) return
+
+      if (avatarState.value === 'speak') {
+        setTimeout(() => {
+          if (!this.asrLoopStopped) loop()
+        }, 500)
+        return
+      }
+
+      const callbacks = {
+        onFinished: async (text: string) => {
+          const trimmed = text.trim()
+          if (trimmed) {
+            // 有识别结果 → 认为这一轮有人说话
+            this.updateLastUserVoice()
+
+            console.log('[ASR loop] 识别结果:', trimmed)
+
+            // 如果没离线，就当成正常问题 → 走 sendMessage
+            if (appState.interaction.mode !== 'offline') {
+              appState.ui.text = trimmed
+              await this.sendMessage()
+            }
+          }
+
+          setTimeout(() => {
+            // 1. 先关掉 UI 层“正在聆听”的标记
+            this.stopVoiceInput()  // isListening = false，聆听动画收回
+      
+            // 2. 再启动下一轮监听
+            if (!this.asrLoopStopped) {
+              loop()
+            }
+          }, 3000)
+        },
+        onError: (err: any) => {
+          console.error('[ASR loop] 出错:', err)
+          if (!this.asrLoopStopped) {
+            setTimeout(() => loop(), 1000)
+          }
+        }
+      }
+
+      //  这一行：复用你“按钮点击时”的逻辑（会把 isListening = true，触发聆听动画）
+      this.startVoiceInput(callbacks)
+
+      //  然后真正开始录音 + 识别
+      asr.start(callbacks)
+    }
+
+    loop()
   }
 }
 
