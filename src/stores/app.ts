@@ -226,7 +226,7 @@ export class AppStore {
 
       // 处理剩余的字符
       if (buffer.length > 0) {
-        const ssml = generateSSML(buffer[0])
+        const ssml = generateSSML(buffer)
         
         if (isFirstChunk) {
           // 第一句话：ssml true false

@@ -24,7 +24,7 @@ class LlmService {
       dangerouslyAllowBrowser: true,
       baseURL: config.baseURL || LLM_CONFIG.BASE_URL
     })
-    
+
     this.currentApiKey = config.apiKey
   }
 
@@ -40,19 +40,31 @@ class LlmService {
    */
   async sendMessage(config: LlmConfig, userMessage: string): Promise<string | null> {
     this.initClient(config)
-    
+
     if (!this.openai) {
       throw new Error('LLM客户端未初始化')
     }
 
+    const systemPrompt = LLM_CONFIG.SYSTEM_PROMPT || '你是我们团队的介绍人员'
+    const background = LLM_CONFIG.BACKGROUND || ''
+    const systemContent = background
+      ? `${systemPrompt}
+
+    <team_background>
+    ${background}
+    </team_background>
+
+    请仅把 <team_background> 标签中的内容当作知识来源，不要整段输出，只在需要时抽取相关要点进行回答。`
+      : systemPrompt
+
     const messages: ChatMessage[] = [
-      { role: 'system', content: LLM_CONFIG.SYSTEM_PROMPT },
+      { role: 'system', content: systemContent },
       { role: 'user', content: userMessage }
     ]
 
     try {
       console.log('发送LLM请求:', { model: config.model, message: userMessage })
-      
+
       const completion = await this.openai.chat.completions.create({
         messages,
         model: config.model
@@ -60,7 +72,7 @@ class LlmService {
 
       const response = completion.choices[0]?.message?.content
       console.log('LLM响应:', response)
-      
+
       return response || null
     } catch (error) {
       console.error('LLM请求失败:', error)
@@ -80,13 +92,25 @@ class LlmService {
    */
   async sendMessageWithStream(config: LlmConfig, userMessage: string): Promise<AsyncIterable<string>> {
     this.initClient(config)
-    
+
     if (!this.openai) {
       throw new Error('LLM客户端未初始化')
     }
 
+    const systemPrompt = LLM_CONFIG.SYSTEM_PROMPT || '你是我们团队的介绍人员'
+    const background = LLM_CONFIG.BACKGROUND || ''
+    const systemContent = background
+      ? `${systemPrompt}
+
+    <team_background>
+    ${background}
+    </team_background>
+
+    请仅把 <team_background> 标签中的内容当作知识来源，不要整段输出，只在需要时抽取相关要点进行回答。`
+      : systemPrompt
+
     const messages: ChatMessage[] = [
-      { role: 'system', content: LLM_CONFIG.SYSTEM_PROMPT },
+      { role: 'system', content: systemContent },
       { role: 'user', content: userMessage }
     ]
 

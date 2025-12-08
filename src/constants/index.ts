@@ -12,6 +12,7 @@ const {
   VITE_MODEL,
   VITE_API_KEY,
   VITE_SYSTEM_PROMPT,
+  VITE_BACKGROUND,
 } = import.meta.env
 
 // LLM配置
@@ -20,6 +21,7 @@ export const LLM_CONFIG = {
   DEFAULT_MODEL: VITE_MODEL,
   SYSTEM_PROMPT: VITE_SYSTEM_PROMPT,
   API_KEY: VITE_API_KEY,
+  BACKGROUND: VITE_BACKGROUND,
 } as const
 
 // ASR配置
