@@ -12,7 +12,7 @@ export interface AvatarState {
 
 // ASR相关类型定义
 export interface AsrConfig {
-  // provider: 'tx' // 目前只支持腾讯云
+  // provider: 'tx' // 想要连接相关API 例如腾讯
   provider: 'sensevoice'
   sensevoiceUrl: string
   // appId: string | number
@@ -46,7 +46,14 @@ export interface AppStore {
   sendMessage(): Promise<string | undefined>
   startVoiceInput(callbacks: AsrCallbacks): void
   stopVoiceInput(): void
+
+  startContinuousListening: () => void      // 开启“长期开麦+状态机”模式
+  stopContinuousListening: () => void       // 停止连续监听
+  updateLastUserVoice: () => void           // 每次检测到用户说话时调用
 }
+
+
+export type InteractionMode = 'online' | 'standby' | 'offline'
 
 // Store状态类型定义
 export interface AppState {
@@ -78,6 +85,12 @@ export interface AppState {
   ui: {
     text: string
     subTitleText: string
+  }
+
+  interaction:{
+    mode: InteractionMode
+    lastUserVoiceAt: number
+    wakeWord:string
   }
 }
 

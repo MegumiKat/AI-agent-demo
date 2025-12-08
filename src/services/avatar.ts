@@ -1,6 +1,15 @@
-import type { AvatarConfig } from '../types'
+import type { AvatarConfig, InteractionMode } from '../types'
 import { generateContainerId, getPromiseState } from '../utils'
 import { SDK_CONFIG, APP_CONFIG } from '../constants'
+import { appState } from '../stores/app'
+
+function getAvatarInstance(): any | null {
+  return appState.avatar.instance as any
+}
+
+function setInteractionMode(mode: InteractionMode) {
+  appState.interaction.mode = mode
+}
 
 interface AvatarCallbacks {
   onSubtitleOn: (text: string) => void
@@ -51,6 +60,7 @@ class AvatarService {
       resolve = res
       reject = rej
     })
+    
 
     // SDK构造选项
     const constructorOptions = {
@@ -127,6 +137,60 @@ class AvatarService {
     } catch (error) {
       console.error('断开连接时出错:', error)
     }
+  }
+
+
+  avatarGoOnline() {
+    const inst = getAvatarInstance()
+    if (!inst) return
+    inst.onlineMode?.()
+    setInteractionMode('online')
+    console.log('[avatar] 切换到 online 模式')
+  }
+  
+  avatarGoOffline() {
+    const inst = getAvatarInstance()
+    if (!inst) return
+    inst.offlineMode?.()
+    setInteractionMode('offline')
+    console.log('[avatar] 切换到 offline 模式')
+  }
+  
+  avatarToIdle() {
+    const inst = getAvatarInstance()
+    if (!inst) return
+    inst.idle?.()
+    console.log('[avatar] 切换到 idle 状态')
+  }
+  
+  avatarToInteractiveIdle() {
+    const inst = getAvatarInstance()
+    if (!inst) return
+    inst.interactiveidle?.()
+    setInteractionMode('standby')   // 这里我们约定 standby = 待机互动
+    console.log('[avatar] 切换到 interactive_idle(待机互动) 状态')
+  }
+  
+  avatarToListen() {
+    const inst = getAvatarInstance()
+    if (!inst) return
+    inst.listen?.()
+    console.log('[avatar] 切换到 listen(倾听) 状态')
+  }
+  
+  avatarToThink() {
+    const inst = getAvatarInstance()
+    if (!inst) return
+    inst.think?.()
+    console.log('[avatar] 切换到 think(思考) 状态')
+  }
+  
+  avatarSpeak(text: string) {
+    const inst = getAvatarInstance()
+    if (!inst || !text?.trim()) return
+    // 文档里 speak 的签名是 speak(ssml, is_start, is_end)
+    inst.speak?.(text, true, true)
+    console.log('[avatar] speak:', text)
   }
 }
 

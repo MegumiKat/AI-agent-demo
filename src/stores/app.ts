@@ -1,9 +1,10 @@
 import { reactive, ref } from 'vue'
-import type { AppState, AvatarConfig, AsrConfig, LlmConfig } from '../types'
+import type { AppState, AvatarConfig, AsrConfig, LlmConfig, AsrCallbacks } from '../types'
 import { LLM_CONFIG, APP_CONFIG } from '../constants'
 import { validateConfig, delay, generateSSML } from '../utils'
 import { avatarService } from '../services/avatar'
 import { llmService } from '../services/llm'
+
 
 // 应用状态
 export const appState = reactive<AppState>({
@@ -29,6 +30,11 @@ export const appState = reactive<AppState>({
   ui: {
     text: '',
     subTitleText: ''
+  },
+  interaction: {
+    mode: 'online',
+    lastUserVoiceAt: 0,
+    wakeWord: '唤醒助手'
   }
 })
 
@@ -118,7 +124,7 @@ function splitSentence(text: string): string[] {
   if (splitIndex > 0 && splitIndex < text.length) {
     return [text.substring(0, splitIndex), text.substring(splitIndex)]
   }
-  
+
   return [text]
 }
 
@@ -134,7 +140,7 @@ export class AppStore {
    */
   async connectAvatar(): Promise<void> {
     const { appId, appSecret } = appState.avatar
-    
+
     if (!validateConfig({ appId, appSecret }, ['appId', 'appSecret'])) {
       throw new Error('appId 或 appSecret 为空')
     }
@@ -157,6 +163,9 @@ export class AppStore {
 
       appState.avatar.instance = avatar
       appState.avatar.connected = true
+
+      avatarService.avatarGoOnline()
+      avatarService.avatarToInteractiveIdle()
     } catch (error) {
       appState.avatar.connected = false
       throw error
@@ -169,6 +178,7 @@ export class AppStore {
    */
   disconnectAvatar(): void {
     if (appState.avatar.instance) {
+      avatarService.avatarGoOffline()
       avatarService.disconnect(appState.avatar.instance)
       appState.avatar.instance = null
       appState.avatar.connected = false
@@ -183,7 +193,7 @@ export class AppStore {
    */
   async sendMessage(): Promise<string | undefined> {
     const { llm, ui, avatar } = appState
-    
+
     if (!validateConfig(llm, ['apiKey']) || !ui.text || !avatar.instance) {
       return
     }
@@ -201,15 +211,17 @@ export class AppStore {
       // 等待虚拟人停止说话
       await this.waitForAvatarReady()
 
+      avatarService.avatarToThink()
+
       // 流式播报响应内容
       let buffer = ''
       let isFirstChunk = true
-      
+
       for await (const chunk of stream) {
         buffer += chunk
         const arr = splitSentence(buffer)
-        
-        if(arr.length > 1) {
+
+        if (arr.length > 1) {
           const ssml = generateSSML(arr[0] || '')
           if (isFirstChunk) {
             // 第一句话：ssml true false
@@ -219,15 +231,15 @@ export class AppStore {
             // 中间的话：ssml false false
             avatar.instance.speak(ssml, false, false)
           }
-          
+
           buffer = arr[1] || ''
-        }   
+        }
       }
 
       // 处理剩余的字符
       if (buffer.length > 0) {
         const ssml = generateSSML(buffer)
-        
+
         if (isFirstChunk) {
           // 第一句话：ssml true false
           avatar.instance.speak(ssml, true, false)
@@ -240,6 +252,8 @@ export class AppStore {
       // 最后一句话：ssml false true
       const finalSsml = generateSSML('')
       avatar.instance.speak(finalSsml, false, true)
+
+      avatarService.avatarToInteractiveIdle()
 
       return buffer
     } catch (error) {
@@ -277,9 +291,25 @@ export class AppStore {
    */
   private async waitForAvatarReady(): Promise<void> {
     if (avatarState.value === 'speak') {
-      appState.avatar.instance.think()
+      avatarService.avatarToThink()
       await delay(APP_CONFIG.SPEAK_INTERRUPT_DELAY)
     }
+  }
+
+
+
+  startContinuousListening() {
+    console.log('[appStore] startContinuousListening() 暂未实现')
+  }
+
+  stopContinuousListening() {
+    console.log('[appStore] stopContinuousListening() 暂未实现')
+  }
+
+  updateLastUserVoice() {
+    appState.interaction.lastUserVoiceAt = Date.now()
+    // 后面我们会在这里触发状态机逻辑（3s 待机 / 5s offline）
+    console.log('[appStore] lastUserVoiceAt 更新为', appState.interaction.lastUserVoiceAt)
   }
 }
 
