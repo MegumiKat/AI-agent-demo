@@ -146,6 +146,14 @@ export function useAsr(config: AsrConfig) {
     }
   }
 
+
+  if (typeof window !== 'undefined') {
+    ; (window as any).__asr = {
+      start,
+      stop
+    }
+  }
+
   return {
     asrText,
     isListening,
