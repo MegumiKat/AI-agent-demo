@@ -5,12 +5,16 @@ import { validateConfig, delay, generateSSML } from '../utils'
 import { avatarService } from '../services/avatar'
 import { llmService } from '../services/llm'
 
+const {
+  VITE_AVATAR_APP_ID,
+  VITE_AVATAR_APP_SECRET,
+} = import.meta.env
 
 // 应用状态
 export const appState = reactive<AppState>({
   avatar: {
-    appId: '',
-    appSecret: '',
+    appId: VITE_AVATAR_APP_ID,
+    appSecret: VITE_AVATAR_APP_SECRET,
     connected: false,
     instance: null
   },
@@ -326,7 +330,7 @@ export class AppStore {
       const now = Date.now()
       const last = appState.interaction.lastUserVoiceAt
 
-      if(!last) return
+      if (!last) return
 
       const diff = now - last
 
@@ -434,7 +438,7 @@ export class AppStore {
           setTimeout(() => {
             // 1. 先关掉 UI 层“正在聆听”的标记
             this.stopVoiceInput()  // isListening = false，聆听动画收回
-      
+
             // 2. 再启动下一轮监听
             if (!this.asrLoopStopped) {
               loop()
