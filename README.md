@@ -1,115 +1,146 @@
-# 智能Avatar交互Demo
+# Smart Avatar Interaction Demo
 
-这是一个基于 Vue 3 + TypeScript + Vite 构建的智能虚拟人交互演示应用，集成了语音识别、大语言模型和虚拟人SDK，提供完整的语音交互体验。
+This is a smart virtual human interaction demo application built with `Vue 3 + TypeScript +  Vite`. It integrates speech recognition, large language models, and a virtual human SDK to provide a complete voice interaction experience. This project is based on mofaxingyun avatar [https://xingyun3d.com].
 
-## 📋 功能特性
+## 📋 Features and functionalities
 
-- **🎭 虚拟人渲染**: 基于 XmovAvatar SDK 的3D虚拟人渲染
-- **🎤 语音识别**: 集成腾讯云ASR实现实时语音转文字
-- **🤖 AI对话**: 支持豆包大模型进行智能对话
-- **💬 字幕显示**: 实时显示语音识别结果和AI回复
-- **🎙️ 语音输入**: 支持语音输入和文本输入两种交互方式
-- **⚙️ 配置管理**: 灵活的配置界面，支持多种API配置
+- **🎭 Virtual Human Rendering**: 3D virtual human rendering based on the XmovAvatar SDK
+- **🎤 Speech recognition**: Using the local SenseVoice model for real-time speech-to-text conversion.
+- **🤖 AI Chating**: Supports Aliyun large language models (Qwen3) / Doubao for intelligent conversations.
+- **💬 Subtitles are displayed**: Displays speech recognition results and AI responses in real time.
+- **🎙️ Voice input**: It supports two interaction methods: voice input and text input.
+- **⚙️ Configuration Management**: Flexible configuration interface, supporting various API configurations.
 
-## 🏗️ 项目结构
+## 🏗️ Project Structure
 
-```
+```shell
 src/
-├── App.vue                    # 应用主组件
-├── main.ts                    # 应用入口
-├── style.css                  # 全局样式
-├── vite-env.d.ts             # Vite环境类型声明
-├── components/                # Vue组件
-│   ├── AvatarRender.vue      # 虚拟人渲染组件
-│   └── ConfigPanel.vue       # 配置面板组件
-├── stores/                    # 状态管理
-│   ├── app.ts                # 应用状态和业务逻辑
-│   └── sdk-test.html         # SDK测试页面
-├── services/                  # 服务层
-│   ├── avatar.ts             # 虚拟人SDK服务
-│   └── llm.ts                # 大语言模型服务
-├── composables/               # Vue组合式函数
-│   └── useAsr.ts             # 语音识别Hook
-├── types/                     # TypeScript类型定义
-│   └── index.ts              # 统一类型导出
-├── constants/                 # 常量定义
-│   └── index.ts              # 应用常量
-├── utils/                     # 工具函数
-│   ├── index.ts              # 通用工具函数
-│   └── sdk-loader.ts         # SDK加载器
-├── lib/                       # 第三方库封装
-│   └── asr.ts                # 语音识别底层服务
-└── assets/                    # 静态资源
-    ├── siri.png              # 语音识别动画图标
+├── App.vue                   # Application main component
+├── main.ts                   # Application Entry Point
+├── .env (env)                # enviroment varaibles
+├── style.css                 # Global styles
+├── vite-env.d.ts             # Vite environment type declarations
+├── components/               # Vue components
+│   ├── AvatarRender.vue      # Virtual human rendering component
+│   └── ConfigPanel.vue       # Configure panel components
+├── stores/                   # State Management
+│   ├── app.ts                # Application state and business logic
+│   └── sdk-test.html         # SDK Test Page
+├── services/                 # Service layer
+│   ├── avatar.ts             # Virtual Human SDK Service
+│   └── llm.ts                # Large Language Model Services
+├── composables/              # Vue Composition API
+│   └── useAsr.ts             # Audio Recognition Hook
+├── types/                    # TypeScript type definitions
+│   └── index.ts              # Unified type export
+├── constants/                # Constant Definitions
+│   └── index.ts              # Application Constants
+├── utils/                    # Utility functions
+│   ├── index.ts              # General utility functions
+│   └── sdk-loader.ts         # SDK Loader
+├── lib/                      # Third-party library encapsulation (not used but if using tx)
+│   └── asr.ts                # Speech recognition underlying services
+├── backend/                  # backend
+│   └── sensevoice_api.py     # local sensevoice model and api
+│   └── requirements.txt      # dependence
+└── assets/                   # Static resources
+    ├── siri.png              # Speech recognition animation icon
     └── vue.svg               # Vue Logo
 ```
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 环境要求
+### Environment Requirment
+
+#### Frontend
 
 - Node.js >= 16
-- pnpm (推荐)
+- pnpm (Recommend)
 
-### 安装依赖
+#### Backend
+
+- See requirements.txt
+
+### Install dependencies
 
 ```bash
-pnpm install
+pnpm install  # frontend
 ```
 
-### 开发环境运行
+```bash
+pip install -r requirements.txt  # backend
+```
+
+### Development environment running
 
 ```bash
 pnpm run dev
 ```
 
-### 构建生产版本
+```bash
+python sensevoice_api.py
+```
+
+### Build a production version
 
 ```bash
 pnpm run build
 ```
 
-### 预览构建结果
+### Preview build results
 
 ```bash
 pnpm run preview
 ```
 
-## ⚙️ 配置说明
+## ⚙️ Configuration Instructions
 
-在使用本应用前，需要配置以下参数：
+Before using this application, the following parameters need to be configured :
 
-### 1. 虚拟人SDK配置
-- **应用APP ID**: XmovAvatar SDK的应用ID
-- **应用APP Secret**: XmovAvatar SDK的应用密钥
+### 0. Modify environment files
 
-### 2. 语音识别配置（腾讯云ASR）
-- **ASR App ID**: 腾讯云语音识别应用ID
-- **ASR Secret ID**: 腾讯云访问密钥ID
-- **ASR Secret Key**: 腾讯云访问密钥
+- Rename the `env` file to `.env` and fill in all the parameters within it.
 
-### 3. 大语言模型配置
-- **大模型**: 当前支持 `doubao-1-5-pro-32k-250115`
-- **大模型Key**: 对应API的访问密钥
+### 1. Virtual Human SDK Configuration
 
-## 🎯 使用指南
+- **VITE_AVATAR_APP_ID**: XmovAvatar SDK Application ID
+- **VITE_AVATAR_APP_SECRET**: XmovAvatar SDK application key
 
-1. **配置参数**: 在右侧配置面板中填入所需的API配置信息
-2. **建立连接**: 点击"连接"按钮初始化虚拟人SDK
-3. **文本交互**: 在文本框中输入内容，点击"发送"进行对话
-4. **语音交互**: 点击"语音输入"按钮进行语音对话
-5. **查看回复**: 虚拟人会播报AI回复，同时显示字幕
+### 2. Speech Recognition Configuration (example: tencent cloud ASR)
+
+- **if you use local backend sensevoice you don't need to do below**
+- **ASR App ID**: Tencent Cloud Speech Recognition Application ID
+- **ASR Secret ID**: Tencent Cloud Access Key ID
+- **ASR Secret Key**: Tencent Cloud Access Key
+- **if you want to use any ASR Api you need to modify relevant files**
+
+### 3. LLM
+
+- **VITE_MODEL**: Currently supported model: `qwen3-max`
+- **VITE_API_KEY**: The access key for the corresponding API
+- **VITE_BASE_URL**: The base url for the corresoponding API
+- **VITE_SYSTEM_PROMPT**: Prompt
+- **VITE_BACKGROUND**: Background, detailed desc, methods for implementing a simple knowledge base
+
+## 🎯 User Guide
+
+1. **Configuration parameters**: Fill in the required API configuration information in the `.env` file.
+2. **Establish a connection**: The connection will be established automatically when you access the webpage, or you can click the "Connect" button.
+3. **Text interaction**: Enter your message in the text box and click "Send" to start the conversation.
+4. **Voice interaction**: Now listening automatically.
+5. **View replies**: The virtual character will read out the AI's response while simultaneously displaying subtitles.
 
 ## 🔧 技术栈
 
-- **前端框架**: Vue 3 (Composition API)
-- **开发语言**: TypeScript
-- **构建工具**: Vite
-- **虚拟人SDK**: XmovAvatar
-- **语音识别**: 腾讯云ASR
-- **大语言模型**: 豆包API (基于OpenAI兼容接口)
+- **Frontend Framework**: Vue 3 (Composition API)
+- **Backend Framework**: Fastapi
+- **Development Language**: TypeScript + Python
+- **Build Tools**: Vite
+- **Virtual Human SDK**: XmovAvatar
+- **Speech Recognition**: Local Sensevoice ASR
+- **LLM**: Aliyun API (`qwen3-max` or any model on 百炼大模型广场)
 
-## 📦 核心依赖
+## 📦 Core Dependencies
 
 ```json
 {
@@ -236,7 +267,7 @@ const answer = await llmService.send(model, text)
   - 支持麦克风权限的 iframe 嵌入
   - 一键展开/收起交互体验
 - **技术**: 纯 HTML + CSS + JavaScript
-- **访问**: 通过 HTTP 服务器访问 `http://localhost:8000/demo.html`
+- **访问**: 通过 HTTP 服务器访问 `http://192.168.1.141:8000/demo.html`
 
 ## 📄 许可证
 
