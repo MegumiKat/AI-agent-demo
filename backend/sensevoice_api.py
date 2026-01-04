@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+import uvicorn
 from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File
@@ -42,12 +43,19 @@ app = FastAPI()
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://localhost:5173",
+    "https://127.0.0.1:5173",
+    # 你的局域网访问地址（把 192.168.1.10 换成你实际 IP）
+    "http://192.168.8.210:5173",
+    "https://192.168.8.210:5173",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    # allow_origins=origins,
+    allow_origins=["*"],
+    # allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -93,11 +101,14 @@ async def asr_endpoint(
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
 
+@app.get("/health")
+def health():
+    return {"ok": True}
+
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(
         "sensevoice_api:app",
-        host="localhost",   # 或 "127.0.0.1"
-        port=8001,        # 👈 这里写死 8001
-        reload=True,
+        host="0.0.0.0",   # 允许局域网其它设备访问
+        port=8001,
+        reload=False,     # 建议关闭：避免重复加载模型
     )

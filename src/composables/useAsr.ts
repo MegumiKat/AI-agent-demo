@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import type { AsrConfig, AsrCallbacks } from '../types'
 
 // 默认的后端地址（你 curl 用的是啥就写啥）
-const DEFAULT_SENSEVOICE_URL = 'http://localhost:8001/asr'
+const DEFAULT_SENSEVOICE_URL = 'api/asr'
 
 function getAsrUrl(config: AsrConfig): string {
   return config.sensevoiceUrl || DEFAULT_SENSEVOICE_URL

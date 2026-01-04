@@ -21,7 +21,7 @@ export const appState = reactive<AppState>({
   asr: {
     // provider: 'tx',
     provider: 'sensevoice',
-    sensevoiceUrl: 'http://localhost:8001/asr',
+    sensevoiceUrl: 'api/asr',
     // appId: '',
     // secretId: '',
     // secretKey: '',

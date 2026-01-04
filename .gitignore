@@ -31,6 +31,7 @@ backend/.mypy_cache/
 # 如果你的 .env 在根目录或 backend 目录，根据实际情况保留：
 .env
 backend/.env
+certs
 
 # =========================
 # 测试/临时文件（根据你当前结构）
