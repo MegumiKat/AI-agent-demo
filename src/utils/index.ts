@@ -1,4 +1,5 @@
 import { APP_CONFIG } from '../constants'
+export * from './text'
 
 /**
  * 生成随机容器ID

@@ -21,17 +21,20 @@
 
       <div class="form-group">
         <label>ASR 服务</label>
-        <!-- 先直接写死 SenseVoice，也可以以后做选项切换 -->
         <select v-model="appState.asr.provider">
           <option value="sensevoice">本地 SenseVoice</option>
-          <!-- 如果以后要保留腾讯，可以再加一个 -->
+          <!-- 以后如果要加腾讯，再补一个选项 -->
           <!-- <option value="tx">腾讯云</option> -->
         </select>
       </div>
 
       <div class="form-group">
         <label>SenseVoice 接口地址</label>
-        <input v-model="appState.asr.sensevoiceUrl" type="text" placeholder="例如：http://127.0.0.1:8001/asr" />
+        <input
+          v-model="appState.asr.sensevoiceUrl"
+          type="text"
+          placeholder="留空使用 /api/asr（通过代理转发到后端）"
+        />
       </div>
     </section>
 
@@ -57,11 +60,19 @@
     <!-- 控制按钮 -->
     <section class="control-section">
       <div class="button-group">
-        <button @click="handleConnect" :disabled="isConnecting || appState.avatar.connected" class="btn btn-primary">
+        <button
+          @click="handleConnect"
+          :disabled="isConnecting || appState.avatar.connected"
+          class="btn btn-primary"
+        >
           {{ isConnecting ? '连接中...' : appState.avatar.connected ? '已连接' : '连接' }}
         </button>
 
-        <button @click="handleDisconnect" :disabled="!appState.avatar.connected" class="btn btn-secondary">
+        <button
+          @click="handleDisconnect"
+          :disabled="!appState.avatar.connected"
+          class="btn btn-secondary"
+        >
           断开
         </button>
       </div>
@@ -77,13 +88,20 @@
       </div>
 
       <div class="button-group">
-        <button @click="handleVoiceInput" :disabled="!appState.avatar.connected || appState.asr.isListening"
-          class="btn btn-voice">
-          {{ appState.asr.isListening ? '正在听...' : '语音输入' }}
+        <!-- 语音按钮：只负责开/关连续聆听 -->
+        <button
+          @click="handleVoiceInput"
+          :disabled="!appState.avatar.connected"
+          class="btn btn-voice"
+        >
+          {{ appState.asr.isListening ? '停止聆听' : '开启聆听' }}
         </button>
 
-        <button @click="handleSendMessage"
-          :disabled="!appState.avatar.connected || !appState.ui.text.trim() || isSending" class="btn btn-primary">
+        <button
+          @click="handleSendMessage"
+          :disabled="!appState.avatar.connected || !appState.ui.text.trim() || isSending"
+          class="btn btn-primary"
+        >
           {{ isSending ? '发送中...' : '发送' }}
         </button>
       </div>
@@ -94,7 +112,7 @@
 <script setup lang="ts">
 import { inject, ref, computed } from 'vue'
 import { useAsr } from '../composables/useAsr'
-import { SUPPORTED_LLM_MODELS } from '../constants'
+import { SUPPORTED_LLM_MODELS, SENSEVOICE_CONFIG } from '../constants'
 import type { AppState, AppStore } from '../types'
 
 // 注入全局状态和方法
@@ -106,15 +124,16 @@ const isConnecting = ref(false)
 const isSending = ref(false)
 const supportedModels = SUPPORTED_LLM_MODELS
 
-// ASR Hook - 使用computed确保配置更新时重新创建
+// ASR 配置：留空时由 useAsr 使用默认 '/api/asr'
 const asrConfig = computed(() => ({
   provider: 'sensevoice' as const,
-  sensevoiceUrl: appState.asr.sensevoiceUrl || 'http://localhost:8001/asr',
-  vadSilenceTime: 5000, // 可选：5 秒自动停止录音
+  sensevoiceUrl: appState.asr.sensevoiceUrl || '',
+  vadSilenceTime: SENSEVOICE_CONFIG.DEFAULT_VAD_SILENCE_TIME, // 可选：5 秒自动停止录音
 }))
 
-// 初始化ASR hook（用于停止功能）
-const { start: startAsr, stop: stopAsr } = useAsr(asrConfig.value)
+// 初始化 ASR：内部会注册全局 ASR（比如通过 asrRegistry / window.__asr）
+// 这里不要再拿 start/stop 出来用
+useAsr(asrConfig.value)
 
 // 事件处理函数
 async function handleConnect() {
@@ -135,57 +154,17 @@ function handleDisconnect() {
   appStore.disconnectAvatar()
 }
 
+// 语音按钮：只控制 start/stopContinuousListening
 function handleVoiceInput() {
+  if (!appState.avatar.connected) return
+
   if (appState.asr.isListening) {
-    stopAsr()
-    appStore.stopVoiceInput()
-    return
+    console.log('[UI] 手动停止自动聆听')
+    appStore.stopContinuousListening()
+  } else {
+    console.log('[UI] 手动开启自动聆听')
+    appStore.startContinuousListening()
   }
-
-  // 验证ASR配置
-  // 校验 SenseVoice URL
-  if (!appState.asr.sensevoiceUrl) {
-    alert('请先配置 SenseVoice 接口地址')
-    return
-  }
-
-  // 创建新的ASR实例（使用当前配置）
-  // 统一的回调
-  const callbacks = {
-    //  识别完成：自动发给 LLM
-    onFinished: async (text: string) => {
-      try {
-        console.log('ASR 识别结果:', text)
-        // 1. 把识别文本放到 UI 状态（方便你在输入框里看到）
-        appState.ui.text = text
-
-        // 2. 标记“发送中”，禁用发送按钮
-        isSending.value = true
-
-        // 3. 直接调用已有的发送逻辑：内部会调 LLM + 让 avatar 说话
-        await appStore.sendMessage()
-      } catch (error) {
-        console.error('语音识别后发送消息失败:', error)
-        alert('语音识别后发送消息失败')
-      } finally {
-        isSending.value = false
-        appStore.stopVoiceInput()
-      }
-    },
-
-    // 识别错误
-    onError: (error: any) => {
-      console.error('语音识别错误:', error)
-      alert('语音识别失败，请重试')
-      appStore.stopVoiceInput()
-    }
-  }
-
-  // 通知 store：开始语音输入（它会把 asr.isListening 设为 true）
-  appStore.startVoiceInput(callbacks)
-
-  // 调用 useAsr 开始录音+识别
-  startAsr(callbacks)
 }
 
 async function handleSendMessage() {

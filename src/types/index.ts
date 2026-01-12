@@ -1,14 +1,30 @@
 // 虚拟人相关类型定义
+// 虚拟人相关类型定义
 export interface AvatarConfig {
   appId: string
   appSecret: string
 }
 
-export interface AvatarState {
+/**
+ * 如果你以后还想用“多个布尔标记”这种结构，可以保留这个接口，
+ * 只是改个名字避免和状态枚举冲突。
+ */
+export interface AvatarStatusFlags {
   connected: boolean
   speaking: boolean
   thinking: boolean
 }
+
+/**
+ * 虚拟人“当前状态”类型：只允许这些字符串
+ */
+export type AvatarState =
+  | ''        // 初始 / 未知
+  | 'idle'    // 空闲
+  | 'speak'   // 正在说话
+  | 'listen'  // 正在倾听
+  | 'think'   // 思考 / 过渡
+  | 'unknown'
 
 // ASR相关类型定义
 export interface AsrConfig {

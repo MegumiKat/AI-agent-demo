@@ -1,4 +1,4 @@
-import type { AvatarConfig, InteractionMode } from '../types'
+import type { AvatarConfig, InteractionMode, AvatarState } from '../types'
 import { generateContainerId, getPromiseState } from '../utils'
 import { SDK_CONFIG, APP_CONFIG } from '../constants'
 import { appState } from '../stores/app'
@@ -14,7 +14,7 @@ function setInteractionMode(mode: InteractionMode) {
 interface AvatarCallbacks {
   onSubtitleOn: (text: string) => void
   onSubtitleOff: () => void
-  onStateChange: (state: string) => void
+  onStateChange: (state: AvatarState) => void
 }
 
 class AvatarService {
@@ -94,6 +94,11 @@ class AvatarService {
       }
     }
 
+    // 检查XmovAvatar是否已加载
+    if (!window.XmovAvatar) {
+      throw new Error('XmovAvatar SDK未加载，请检查SDK加载状态')
+    }
+
     // 创建SDK实例
     const avatar = new window.XmovAvatar(constructorOptions)
     
@@ -103,18 +108,23 @@ class AvatarService {
     })
 
     // 初始化SDK
-    await avatar.init({
-      onDownloadProgress: (progress: number) => {
-        console.log(`初始化进度: ${progress}%`)
-        if (progress >= 100) {
-          resolve(true)
+    try {
+      await avatar.init({
+        onDownloadProgress: (progress: number) => {
+          console.log(`初始化进度: ${progress}%`)
+          if (progress >= 100) {
+            resolve(true)
+          }
+        },
+        onClose: () => {
+          onStateChange('')
+          console.log('SDK连接关闭')
         }
-      },
-      onClose: () => {
-        onStateChange('')
-        console.log('SDK连接关闭')
-      }
     })
+    } catch (error) {
+      console.error('SDK初始化失败:', error)
+      throw error
+    }
 
     // 等待连接完成
     const [result] = await Promise.allSettled([
@@ -139,8 +149,12 @@ class AvatarService {
     if (!avatar) return
     
     try {
-      avatar.stop()
-      avatar.destroy()
+      if (typeof avatar.stop === 'function') {
+        avatar.stop()
+      }
+      if (typeof avatar.destroy === 'function') {
+        avatar.destroy()
+      }
     } catch (error) {
       console.error('断开连接时出错:', error)
     }
@@ -150,7 +164,9 @@ class AvatarService {
   avatarGoOnline() {
     const inst = getAvatarInstance()
     if (!inst) return
-    inst.onlineMode?.()
+    if (typeof inst.onlineMode === 'function') {
+      inst.onlineMode?.()
+    }
     setInteractionMode('online')
     console.log('[avatar] 切换到 online 模式')
   }
@@ -158,7 +174,9 @@ class AvatarService {
   avatarGoOffline() {
     const inst = getAvatarInstance()
     if (!inst) return
-    inst.offlineMode?.()
+    if (typeof inst.offlineMode === 'function') {
+      inst.offlineMode?.()
+    }
     setInteractionMode('offline')
     console.log('[avatar] 切换到 offline 模式')
   }
@@ -166,14 +184,18 @@ class AvatarService {
   avatarToIdle() {
     const inst = getAvatarInstance()
     if (!inst) return
-    inst.idle?.()
+    if (typeof inst.idle === 'function') {
+      inst.idle?.()
+    }
     console.log('[avatar] 切换到 idle 状态')
   }
   
   avatarToInteractiveIdle() {
     const inst = getAvatarInstance()
     if (!inst) return
-    inst.interactiveidle?.()
+    if (typeof inst.interactiveidle === 'function') {
+      inst.interactiveidle?.()
+    }
     setInteractionMode('standby')   // 这里我们约定 standby = 待机互动
     console.log('[avatar] 切换到 interactive_idle(待机互动) 状态')
   }
@@ -181,14 +203,18 @@ class AvatarService {
   avatarToListen() {
     const inst = getAvatarInstance()
     if (!inst) return
-    inst.listen?.()
+    if (typeof inst.listen === 'function') {
+      inst.listen?.()
+    }
     console.log('[avatar] 切换到 listen(倾听) 状态')
   }
   
   avatarToThink() {
     const inst = getAvatarInstance()
     if (!inst) return
-    inst.think?.()
+    if (typeof inst.think === 'function') {
+      inst.think?.()
+    }
     console.log('[avatar] 切换到 think(思考) 状态')
   }
   
@@ -196,7 +222,9 @@ class AvatarService {
     const inst = getAvatarInstance()
     if (!inst || !text?.trim()) return
     // 文档里 speak 的签名是 speak(ssml, is_start, is_end)
-    inst.speak?.(text, true, true)
+    if (typeof inst.speak === 'function') {
+      inst.speak?.(text, true, true)
+    }
     console.log('[avatar] speak:', text)
   }
 }
