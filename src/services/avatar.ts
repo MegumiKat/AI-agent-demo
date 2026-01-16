@@ -117,7 +117,7 @@ class AvatarService {
           }
         },
         onClose: () => {
-          onStateChange('')
+          onStateChange('unknown')
           console.log('SDK连接关闭')
         }
     })

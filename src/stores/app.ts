@@ -1,14 +1,9 @@
 import { reactive, ref } from 'vue'
 import type {
   AppState,
-  AvatarConfig,
-  AsrConfig,
-  LlmConfig,
-  AsrCallbacks,
   AvatarState,
-  InteractionMode,
 } from '../types'
-import { LLM_CONFIG, APP_CONFIG, ASR_CONFIG } from '../constants'
+import { LLM_CONFIG, APP_CONFIG, ASR_CONFIG, INTERACTION_CONFIG } from '../constants'
 import { validateConfig, delay, generateSSML } from '../utils'
 import { avatarService } from '../services/avatar'
 import { llmService } from '../services/llm'
@@ -19,14 +14,13 @@ const {
   VITE_AVATAR_APP_SECRET,
 } = import.meta.env
 
-// ====== 日志开关（优化点 #12）======
-// 你也可以改成 import.meta.env.VITE_VERBOSE_LOG === 'true'
+// ====== 日志开关 ======
 const VERBOSE_LOG = import.meta.env.DEV
 function logDebug(...args: any[]) {
   if (VERBOSE_LOG) console.log(...args)
 }
 
-// ====== SSML 安全转义（优化点 #11）======
+// ====== SSML 安全转义 ======
 function escapeXml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -36,8 +30,31 @@ function escapeXml(text: string): string {
     .replace(/'/g, '&apos;')
 }
 function safeGenerateSSML(text: string): string {
-  // 假设 generateSSML 不保证 escape；如你确认内部已 escape，可改为直接 generateSSML(text)
   return generateSSML(escapeXml(text))
+}
+
+// ====== 语音指令匹配：normalize + match ======
+function normalizeCmd(text: string): string {
+  if (!text) return ''
+  let t = text.trim().toLowerCase()
+  // 去空格
+  t = t.replace(/\s+/g, '')
+  // 去常见中英标点
+  t = t.replace(/[，,。.!！？?、；;：:"'“”‘’（）()\[\]【】]/g, '')
+  return t
+}
+
+function matchPhrase(
+  text: string,
+  phrases: readonly string[],
+  mode: 'contains' | 'equals'
+): boolean {
+  const norm = normalizeCmd(text)
+  if (!norm) return false
+  const list = phrases.map(p => normalizeCmd(p)).filter(Boolean)
+  if (list.length === 0) return false
+  if (mode === 'equals') return list.includes(norm)
+  return list.some(p => norm.includes(p))
 }
 
 // 应用状态
@@ -46,87 +63,67 @@ export const appState = reactive<AppState>({
     appId: VITE_AVATAR_APP_ID,
     appSecret: VITE_AVATAR_APP_SECRET,
     connected: false,
-    instance: null
+    instance: null,
   },
   asr: {
     provider: 'sensevoice',
     sensevoiceUrl: '',
-    isListening: false
+    isListening: false,
   },
   llm: {
     model: LLM_CONFIG.DEFAULT_MODEL,
-    apiKey: LLM_CONFIG.API_KEY
+    apiKey: LLM_CONFIG.API_KEY,
   },
   ui: {
     text: '',
-    subTitleText: ''
+    subTitleText: '',
   },
   interaction: {
-    mode: 'online',          // online / standby / offline
+    mode: 'standby', // 默认待机
     lastUserVoiceAt: 0,
-    wakeWord: '唤醒助手'
-  }
+    wakeWord: '唤醒助手', // 兼容字段：实际以 INTERACTION_CONFIG.WAKE_PHRASES 为准
+  },
 })
 
-const MIN_SPLIT_LENGTH = 2 // 最小切分长度
-const MAX_SPLIT_LENGTH = 20 // 最大切分长度
+// ====== 分句（保留你原实现）======
+const MIN_SPLIT_LENGTH = 2
+const MAX_SPLIT_LENGTH = 20
 function splitSentence(text: string): string[] {
   if (!text) return []
-
-  // 定义中文标点（不需要空格）
   const chinesePunctuations = new Set(['、', '，', '：', '；', '。', '？', '！', '…', '\n'])
-  // 定义英文标点（需要后跟空格）
   const englishPunctuations = new Set([',', ':', ';', '.', '?', '!'])
 
   let count = 0
-  let firstValidPunctAfterMin = -1 // 最小长度后第一个有效标点位置
-  let forceBreakIndex = -1 // 强制切分位置
+  let firstValidPunctAfterMin = -1
+  let forceBreakIndex = -1
   let i = 0
   const n = text.length
 
-  // 扫描文本直到达到最大长度或文本结束
   while (i < n && count < MAX_SPLIT_LENGTH) {
     const char = text[i]
 
-    // 处理汉字
     if (char >= '\u4e00' && char <= '\u9fff') {
       count++
-      if (count === MAX_SPLIT_LENGTH) {
-        forceBreakIndex = i + 1
-      }
+      if (count === MAX_SPLIT_LENGTH) forceBreakIndex = i + 1
       i++
-    }
-    // 数字
-    else if (char >= '0' && char <= '9') {
+    } else if (char >= '0' && char <= '9') {
       count++
-      if (count === MAX_SPLIT_LENGTH) {
-        forceBreakIndex = i + 1
-      }
+      if (count === MAX_SPLIT_LENGTH) forceBreakIndex = i + 1
       i++
-    }
-    // 英文单词
-    else if ((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z')) {
+    } else if ((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z')) {
       i++
       while (i < n && ((text[i] >= 'a' && text[i] <= 'z') || (text[i] >= 'A' && text[i] <= 'Z'))) {
         i++
       }
       count++
-      if (count === MAX_SPLIT_LENGTH) {
-        forceBreakIndex = i
-      }
-    }
-    // 标点
-    else {
+      if (count === MAX_SPLIT_LENGTH) forceBreakIndex = i
+    } else {
       if (chinesePunctuations.has(char)) {
-        if (count >= MIN_SPLIT_LENGTH && firstValidPunctAfterMin === -1) {
-          firstValidPunctAfterMin = i
-        }
+        if (count >= MIN_SPLIT_LENGTH && firstValidPunctAfterMin === -1) firstValidPunctAfterMin = i
         i++
       } else if (englishPunctuations.has(char)) {
         if (i + 1 >= n || text[i + 1] === ' ') {
-          if (count >= MIN_SPLIT_LENGTH && firstValidPunctAfterMin === -1) {
-            firstValidPunctAfterMin = i
-          }
+          if (count >= MIN_SPLIT_LENGTH && firstValidPunctAfterMin === -1) firstValidPunctAfterMin = i
         }
         i++
       } else {
@@ -136,40 +133,50 @@ function splitSentence(text: string): string[] {
   }
 
   let splitIndex = -1
-  if (firstValidPunctAfterMin !== -1) {
-    splitIndex = firstValidPunctAfterMin + 1
-  } else if (forceBreakIndex !== -1) {
-    splitIndex = forceBreakIndex
-  }
+  if (firstValidPunctAfterMin !== -1) splitIndex = firstValidPunctAfterMin + 1
+  else if (forceBreakIndex !== -1) splitIndex = forceBreakIndex
 
   if (splitIndex > 0 && splitIndex < text.length) {
     return [text.substring(0, splitIndex), text.substring(splitIndex)]
   }
-
   return [text]
 }
 
-// ====== 虚拟人状态（优化点 #9）======
-// 原来是 ref<AvatarState>('')，改成 null 语义更明确
+// 虚拟人状态
 export const avatarState = ref<AvatarState | null>(null)
 
-// Store类 - 业务逻辑处理
+// Store类
 export class AppStore {
-  private silenceTimer: number | null = null
   private asrLoopStopped = false
-
-  // ======（前 5 点：防串线）======
   private asrSession = 0
-
-  // ======（前 5 点：本地 speaking 锁）======
   private isTtsSpeaking = false
-
-  // ======（优化点 #6）连续监听显式标记，不再用 silenceTimer 当 guard ======
   private isContinuousListening = false
 
-  // ======（优化点 #10）空轮去抖计数 ======
-  private emptyUtteranceCount = 0
-  private readonly EMPTY_TO_STANDBY_THRESHOLD = 2
+  // 防抖：避免唤醒/关闭连续触发
+  private wakeCooldownUntil = 0
+  private stopCooldownUntil = 0
+
+  // ========== 对外：按钮唤醒/按钮关闭（可选但推荐）==========
+  public wake(source: 'voice' | 'button' = 'button') {
+    const now = Date.now()
+    if (now < this.wakeCooldownUntil) return
+    this.wakeCooldownUntil = now + INTERACTION_CONFIG.WAKE_COOLDOWN_MS
+
+    appState.interaction.mode = 'online'
+    this.updateLastUserVoice()
+    avatarService.avatarToListen?.()
+    console.log(`[appStore] wake(${source}) -> online`)
+  }
+
+  public enterStandby() {
+    const now = Date.now()
+    if (now < this.stopCooldownUntil) return
+    this.stopCooldownUntil = now + INTERACTION_CONFIG.STOP_COOLDOWN_MS
+
+    appState.interaction.mode = 'standby'
+    avatarService.avatarToInteractiveIdle()
+    console.log('[appStore] enterStandby -> standby')
+  }
 
   /**
    * 连接虚拟人
@@ -193,21 +200,23 @@ export class AppStore {
           },
           onStateChange: (state: AvatarState) => {
             avatarState.value = state
-          }
+          },
         }
       )
 
       appState.avatar.instance = avatar
       appState.avatar.connected = true
 
-      // 初次连接，认为刚刚有“互动”
-      this.updateLastUserVoice()
+      // 连接后默认待机
+      appState.interaction.mode = 'standby'
+      appState.interaction.lastUserVoiceAt = Date.now()
 
       avatarService.avatarGoOnline()
       avatarService.avatarToInteractiveIdle()
 
+      // 启动 ASR 总循环（一直跑，但 standby 不会回复）
       this.startContinuousListening()
-      console.log('[appStore] 已自动开启连续聆听')
+      console.log('[appStore] 已启动监听循环（standby 模式：仅等待唤醒）')
     } catch (error) {
       appState.avatar.connected = false
       throw error
@@ -243,7 +252,7 @@ export class AppStore {
         {
           provider: 'openai',
           model: llm.model,
-          apiKey: llm.apiKey
+          apiKey: llm.apiKey,
         },
         ui.text
       )
@@ -252,50 +261,47 @@ export class AppStore {
 
       await this.waitForAvatarReady()
 
-      // （前 5 点 #1）完整文本累计
       let fullText = ''
-
       let buffer = ''
       let isFirstChunk = true
 
-      // speak 入口：统一走 safeGenerateSSML（优化点 #11）
       const speakText = (text: string) => {
+        const inst = appState.avatar.instance
+        if (!inst) throw new Error('avatar instance missing (disconnected)')
         const ssml = safeGenerateSSML(text || '')
         if (isFirstChunk) {
-          avatar.instance!.speak(ssml, true, false)
+          inst.speak(ssml, true, false)
           isFirstChunk = false
         } else {
-          avatar.instance!.speak(ssml, false, false)
+          inst.speak(ssml, false, false)
         }
       }
 
-      // （前 5 点 #5）播报期间 speaking 锁
       this.isTtsSpeaking = true
 
       for await (const chunk of stream) {
         fullText += chunk
         buffer += chunk
 
-        // （前 5 点 #2）while 连续切分
         while (true) {
           const arr = splitSentence(buffer)
           if (!arr || arr.length <= 1) break
-
           const part = (arr[0] || '').trim()
           if (part) speakText(part)
-
           buffer = arr[1] || ''
         }
       }
 
-      // stream 结束后播掉残留
       if (buffer.trim().length > 0) {
         speakText(buffer)
       }
 
       // 结束标记
-      const finalSsml = safeGenerateSSML('')
-      avatar.instance.speak(finalSsml, false, true)
+      const inst = appState.avatar.instance
+      if (inst) {
+        const finalSsml = safeGenerateSSML('')
+        inst.speak(finalSsml, false, true)
+      }
 
       await this.waitForAvatarSpeakDone(APP_CONFIG.SPEAK_INTERRUPT_DELAY + 30000)
       this.isTtsSpeaking = false
@@ -311,10 +317,7 @@ export class AppStore {
   /**
    * 开始语音输入
    */
-  startVoiceInput(callbacks: {
-    onFinished: (text: string) => void
-    onError: (error: any) => void
-  }): void {
+  startVoiceInput(callbacks: { onFinished: (text: string) => void; onError: (error: any) => void }): void {
     appState.asr.isListening = true
 
     if (appState.interaction.mode === 'online') {
@@ -340,7 +343,7 @@ export class AppStore {
   }
 
   /**
-   * 等待虚拟人播报结束（用于 speaking 锁释放）
+   * 等待虚拟人播报结束
    */
   private async waitForAvatarSpeakDone(timeoutMs: number): Promise<void> {
     const start = Date.now()
@@ -351,37 +354,25 @@ export class AppStore {
   }
 
   /**
-   * 开始连续监听
+   * 开始连续监听（总循环）
+   * - 注意：不再强制把 mode 改为 online
    */
   startContinuousListening(): void {
-    // （优化点 #6）显式 guard，不再依赖 silenceTimer
     if (this.isContinuousListening) {
       logDebug('[appStore] 连续监听已启动（guard）')
       return
     }
     this.isContinuousListening = true
 
-    // （前 5 点 #3）刷新 session
     this.asrSession += 1
     const session = this.asrSession
 
     this.asrLoopStopped = false
-    this.emptyUtteranceCount = 0
-    appState.interaction.mode = 'online'
-    appState.interaction.lastUserVoiceAt = Date.now()
 
     // 启动 ASR 循环
     this.startAsrLoop(session)
 
-    // 预留：未来扩展 offline/唤醒词
-    const CHECK_INTERVAL = ASR_CONFIG.CHECK_INTERVAL_MS
-    if (this.silenceTimer === null) {
-      this.silenceTimer = window.setInterval(() => {
-        // Phase2 扩展点
-      }, CHECK_INTERVAL)
-    }
-
-    console.log('[appStore] 连续监听已启动')
+    console.log('[appStore] 连续监听循环已启动')
   }
 
   /**
@@ -391,16 +382,9 @@ export class AppStore {
     this.asrLoopStopped = true
     this.isContinuousListening = false
 
-    // （前 5 点 #3）停止时 bump session，旧回调立刻失效
+    // 停止时 bump session，旧回调立刻失效
     this.asrSession += 1
-
-    // （优化点 #8）强制清 speaking 锁，避免残留
     this.isTtsSpeaking = false
-
-    if (this.silenceTimer !== null) {
-      window.clearInterval(this.silenceTimer)
-      this.silenceTimer = null
-    }
 
     this.stopVoiceInput()
 
@@ -413,16 +397,13 @@ export class AppStore {
   }
 
   /**
-   * 有有效语音时更新“最后一次用户说话时间”，同时从 standby 拉回 online
+   * 更新“最后一次用户说话时间”
+   * - 注意：不再在这里把 standby 强行切 online
+   * - 是否唤醒由唤醒词决定（见 ASR loop）
    */
   updateLastUserVoice() {
     appState.interaction.lastUserVoiceAt = Date.now()
     logDebug('[appStore] lastUserVoiceAt 更新为', appState.interaction.lastUserVoiceAt)
-
-    if (appState.interaction.mode === 'standby') {
-      appState.interaction.mode = 'online'
-      logDebug('[appStore] 从 standby 切回 online')
-    }
   }
 
   /**
@@ -439,7 +420,7 @@ export class AppStore {
       if (this.asrLoopStopped) return
       if (session !== this.asrSession) return
 
-      // speaking 锁 / speak 状态都阻止 ASR 重启
+      // speaking 锁 / speak 状态都阻止开启新一轮录音
       if (this.isTtsSpeaking || avatarState.value === 'speak') {
         setTimeout(() => {
           if (!this.asrLoopStopped && session === this.asrSession) loop()
@@ -447,7 +428,6 @@ export class AppStore {
         return
       }
 
-      // offline 不终止 loop（前 5 点 #4）
       if (appState.interaction.mode === 'offline') {
         logDebug('[appStore] offline：轮询等待恢复')
         setTimeout(() => {
@@ -461,72 +441,107 @@ export class AppStore {
           if (this.asrLoopStopped) return
           if (session !== this.asrSession) return
 
-          const trimmed = text.trim()
-          const prevMode = appState.interaction.mode
+          // 防回授：如果录音期间开始播报了，丢弃本轮结果
+          if (this.isTtsSpeaking || avatarState.value === 'speak') {
+            this.stopVoiceInput()
+            setTimeout(() => {
+              if (!this.asrLoopStopped && session === this.asrSession) loop()
+            }, 500)
+            return
+          }
 
+          const trimmed = (text || '').trim()
+          const mode = appState.interaction.mode
+          const now = Date.now()
+
+          // ===== standby：只检测唤醒词，不走 LLM =====
+          if (mode === 'standby') {
+            const isWake =
+              now >= this.wakeCooldownUntil &&
+              matchPhrase(trimmed, INTERACTION_CONFIG.WAKE_PHRASES, INTERACTION_CONFIG.WAKE_MATCH_MODE)
+
+            if (isWake) {
+              this.wakeCooldownUntil = now + INTERACTION_CONFIG.WAKE_COOLDOWN_MS
+              appState.interaction.mode = 'online'
+              this.updateLastUserVoice()
+              avatarService.avatarToListen?.()
+              console.log('[appStore] voice wake -> online')
+            }
+
+            setTimeout(() => {
+              if (this.asrLoopStopped) return
+              if (session !== this.asrSession) return
+              this.stopVoiceInput()
+              loop()
+            }, INTERACTION_CONFIG.WAKE_LOOP_RETRY_MS)
+            return
+          }
+
+          // ===== online：先检测关闭词 =====
+          const isStop =
+            now >= this.stopCooldownUntil &&
+            matchPhrase(trimmed, INTERACTION_CONFIG.STOP_PHRASES, INTERACTION_CONFIG.STOP_MATCH_MODE)
+
+          if (isStop) {
+            this.stopCooldownUntil = now + INTERACTION_CONFIG.STOP_COOLDOWN_MS
+            appState.interaction.mode = 'standby'
+            avatarService.avatarToInteractiveIdle()
+            console.log('[appStore] voice stop -> standby')
+
+            setTimeout(() => {
+              if (this.asrLoopStopped) return
+              if (session !== this.asrSession) return
+              this.stopVoiceInput()
+              loop()
+            }, INTERACTION_CONFIG.WAKE_LOOP_RETRY_MS)
+            return
+          }
+
+          // ===== online：正常对话 =====
           if (trimmed) {
-            // （优化点 #10）有内容：清空空轮计数
-            this.emptyUtteranceCount = 0
-
             this.updateLastUserVoice()
             logDebug('[ASR loop] 识别结果:', trimmed)
-
-            if (prevMode === 'standby') {
-              logDebug('[appStore] 从 standby 被唤醒，补一个 listen 动作')
-              avatarService.avatarToListen?.()
-            }
 
             if (appState.interaction.mode !== 'offline') {
               appState.ui.text = trimmed
               await this.sendMessage()
-            }
-          } else {
-            // （优化点 #10）空轮去抖：累计到阈值才切 standby
-            this.emptyUtteranceCount += 1
-            logDebug('[appStore] 空轮计数 =', this.emptyUtteranceCount)
-
-            if (
-              this.emptyUtteranceCount >= this.EMPTY_TO_STANDBY_THRESHOLD &&
-              appState.interaction.mode !== 'standby'
-            ) {
-              appState.interaction.mode = 'standby'
-              logDebug('[appStore] 连续空轮达到阈值，切换到 standby')
-              avatarService.avatarToInteractiveIdle()
             }
           }
 
           setTimeout(() => {
             if (this.asrLoopStopped) return
             if (session !== this.asrSession) return
-
             this.stopVoiceInput()
             loop()
-          }, 500)
+          }, INTERACTION_CONFIG.NEXT_TURN_DELAY_MS)
         },
 
         onError: (err: any) => {
           if (this.asrLoopStopped) return
           if (session !== this.asrSession) return
 
-          // （优化点 #7）错误时确保 isListening 复位
           this.stopVoiceInput()
-
           console.error('[ASR loop] 出错:', err)
+
           setTimeout(() => {
             if (!this.asrLoopStopped && session === this.asrSession) loop()
           }, 1000)
-        }
+        },
       }
 
       // 开启这一轮录音
       this.startVoiceInput(callbacks)
 
-      void asr.start(callbacks, ASR_CONFIG.MAX_UTTERANCE_MS).catch((err: any) => {
-        // （优化点 #7）start 失败也要复位 isListening，避免 UI 卡死
+      // 根据模式决定本轮录音窗口
+      const dur =
+        appState.interaction.mode === 'standby'
+          ? INTERACTION_CONFIG.WAKE_UTTERANCE_MS
+          : INTERACTION_CONFIG.TURN_UTTERANCE_MS
+
+      void asr.start(callbacks, dur).catch((err: any) => {
         this.stopVoiceInput()
         console.error('[ASR loop] start 出错:', err)
 
-        // 维持 loop：稍后重试
         setTimeout(() => {
           if (!this.asrLoopStopped && session === this.asrSession) loop()
         }, 1000)
